@@ -6,6 +6,7 @@
 ;;;; up to and including section 18.8
 
 ;;; One bug fix by Alberto Segre, segre@cs.cornell.edu, March 1993.
+(load "auxfns")
 
 (defun cross-product (fn xlist ylist)
   "Return a list of all (fn x y) values."
