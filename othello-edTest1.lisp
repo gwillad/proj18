@@ -28,7 +28,7 @@
 
 (defun opponent (player) (if (eql player black) white black))
 
-(deftype board () '(simple-array piece (100)))
+(deftype board () '(simple-array piece (64)))
 
 (defun bref (board square) (aref board square))
 (defsetf bref (board square) (val) 
@@ -38,19 +38,16 @@
   (copy-seq board))
 
 (defconstant all-squares
-  (loop for i from 11 to 88 when (<= 1 (mod i 10) 8) collect i))
+  (loop for i from 10 to 61 when (<= 1 (mod i 9) 7) collect i))
 
 (defun initial-board ()
   "Return a board, empty except for four pieces in the middle."
-  ;; Boards are 100-element vectors, with elements 11-88 used,
-  ;; and the others marked with the sentinel OUTER.  Initially
-  ;; the 4 center squares are taken, the others empty.
-  (let ((board (make-array 100 :element-type 'piece
+  ;; Boards are 72-element vectors, with elements 10-61 used,
+  ;; and the others marked with the sentinel OUTER.
+  (let ((board (make-array 72 :element-type 'piece
                            :initial-element outer)))
     (dolist (square all-squares)
       (setf (bref board square) empty))
-    (setf (bref board 44) white   (bref board 45) black
-          (bref board 54) black   (bref board 55) white)
     board))
 
 (defun count-difference (player board)
@@ -58,41 +55,53 @@
   (- (count player board)
      (count (opponent player) board)))
 
-(defun valid-p (move)
-  "Valid moves are numbers in the range 11-88 that end in 1-8."
-  (and (integerp move) (<= 11 move 88) (<= 1 (mod move 10) 8)))
+(defun how-many (start board dir num)
+  (if (eql (bref board (+ start dir)) (bref board start))
+      (how-many (+ start dir) board dir (+ 1 num))
+    num))
 
-(defun legal-p (move player board)
-  "A Legal move must be into an empty square, and it must
-  flip at least one opponent piece."
-  (and (eql (bref board move) empty)
-       (some #'(lambda (dir) (would-flip? move player board dir))
-             all-directions)))
+(defun count-in-row (player curr-max start board)
+  "Count the number of pieces the player has in a row."
+;  (princ "In count-in-row. Looking at pos: ")(princ start)(terpri)
+  (if (eql start 62)
+      curr-max
+    (if (eql (bref board start) player)
+	(let ((new-max (max
+			(how-many start board -10 1)
+			(how-many start board -9 1)
+			(how-many start board -8 1)
+			(how-many start board -1 1)
+			(how-many start board 1 1)
+			(how-many start board 8 1)
+			(how-many start board 9 1)
+			(how-many start board 10 1))))
+;	  (princ "Examining position: ")(princ start)(terpri)
+;	  (princ "curr-max: ")(princ curr-max)(terpri)
+;	  (princ "new-max: ")(princ new-max)(terpri)
+	  (if (> new-max curr-max)
+	      (count-in-row player new-max (+ start 1) board)
+	    (count-in-row player curr-max (+ start 1) board)))
+      (count-in-row player curr-max (+ start 1) board))
+    ))
+
+(defun evaluation-fn (player board)
+;  (princ "In evaluation-fn...")(terpri)
+  (count-in-row player 1 10 board))
+
+(defun valid-p (move)
+  "Valid moves are columns 1-7 as long as the column isn't full."
+  ;(princ "In valid-p")(terpri)
+  (and (integerp move) (<= 1 move 7)))
+
+(defun legal-p (move board)
+  "A Legal move must be into an empty square,
+   and with no empty squares below it."
+  ;(princ "In legal-p")(terpri)
+  (eql (bref board (+ move 9)) empty))
 
 (defun make-move (move player board)
   "Update board to reflect move by player"
-  ;; First make the move, then make any flips
-  (setf (bref board move) player)
-  (dolist (dir all-directions)
-    (make-flips move player board dir))
-  board)
-
-(defun make-flips (move player board dir)
-  "Make any flips in the given direction."
-  (let ((bracketer (would-flip? move player board dir)))
-    (when bracketer
-      (loop for c from (+ move dir) by dir until (eql c bracketer)
-            do (setf (bref board c) player)))))
-
-(defun would-flip? (move player board dir)
-  "Would this move result in any flips in this direction?
-  If so, return the square number of the bracketing piece."
-  ;; A flip occurs if, starting at the adjacent square, c, there
-  ;; is a string of at least one opponent pieces, bracketed by 
-  ;; one of player's pieces
-  (let ((c (+ move dir)))
-    (and (eql (bref board c) (opponent player))
-         (find-bracketing-piece (+ c dir) player board dir))))
+  (setf (bref board move) player))
 
 (defun find-bracketing-piece (square player board dir)
   "Return the square number of the bracketing piece."
@@ -114,19 +123,18 @@
 
 (defun any-legal-move? (player board)
   "Does player have any legal moves in this position?"
-  (some #'(lambda (move) (legal-p move player board))
+  (some #'(lambda (move) (legal-p move board))
         all-squares))
 
 (defun random-strategy (player board)
   "Make any legal move."
-  (dbg-indent :othello 0 "Choosing randomly from: ~a"  (mapcar #'88->h8 (legal-moves player board)))
-  (random-elt (legal-moves player board)))
+  (dbg-indent :othello 0 "Choosing randomly from: ~a"  (legal-moves board))
+  (random-elt (legal-moves board)))
 
-(defun legal-moves (player board)
+(defun legal-moves (board)
   "Returns a list of legal moves for player"
-  ;;*** fix, segre, 3/30/93.  Was remove-if, which can share with all-squares.
-  (loop for move in all-squares
-	when (legal-p move player board) collect move))
+  (loop for move from 1 to 7
+	when (legal-p move board) collect move))
 
 (defun maximize-difference (player board)
   "A strategy that maximizes the difference in pieces."
@@ -138,8 +146,14 @@
   the move for which EVAL-FN returns the best score.
   FN takes two arguments: the player-to-move and board"
   #'(lambda (player board)
-      (let* ((moves (legal-moves player board))
+      (princ "In maximizer...")(terpri)
+      (princ "board: ")(princ board)(terpri)
+      (let* ((moves (legal-moves board))
              (scores (mapcar #'(lambda (move)
+				 (princ "In this internal lambda...")(terpri)
+				 (princ "moves: ")(princ moves)(terpri)
+				 (princ "player: ")(princ player)(terpri)
+				 (princ "eval-fn: ")(princ eval-fn)(terpri)
 				 (funcall
 				  eval-fn
 				  player
@@ -147,22 +161,23 @@
 					     (copy-board board))))
                              moves))
              (best  (apply #'max scores)))
-  (dbg-indent :othello 0 "Maximizing from moves: ~a"  (mapcar #'88->h8 (legal-moves player board)))
-  (dbg-indent :othello 0 "Corresponding scores: ~a"  scores)
-  (dbg-indent :othello 0 "Best score: ~a"  best)
+;  (dbg-indent :othello 0 "Maximizing from moves: ~a"  (mapcar #'61->g6 (legal-moves board)))
+;  (dbg-indent :othello 0 "Corresponding scores: ~a"  scores)
+;  (dbg-indent :othello 0 "Best score: ~a"  best)
+	(princ "Moves: ")(princ moves)(terpri)
+	(princ "Scores: ")(princ scores)(terpri)
+	(princ "best: ")(princ best)(terpri)
         (elt moves (position best scores)))))
 
 (defparameter *weights*
-  '#(0   0   0  0  0  0  0   0   0 0
-     0 120 -20 20  5  5 20 -20 120 0
-     0 -20 -40 -5 -5 -5 -5 -40 -20 0
-     0  20  -5 15  3  3 15  -5  20 0
-     0   5  -5  3  3  3  3  -5   5 0
-     0   5  -5  3  3  3  3  -5   5 0
-     0  20  -5 15  3  3 15  -5  20 0
-     0 -20 -40 -5 -5 -5 -5 -40 -20 0
-     0 120 -20 20  5  5 20 -20 120 0
-     0   0   0  0  0  0  0   0   0 0))
+  '#(0 0 0 0 0 0 0 0 0
+     0 1 1 1 1 1 1 1 0
+     0 1 1 1 1 1 1 1 0
+     0 1 1 1 1 1 1 1 0
+     0 1 1 1 1 1 1 1 0
+     0 1 1 1 1 1 1 1 0
+     0 1 1 1 1 1 1 1 0
+     0 0 0 0 0 0 0 0 0))
 
 (defun weighted-squares (player board)
   "Sum of the weights of player's squares minus opponent's."
@@ -188,8 +203,8 @@
   searching PLY levels deep and backing up values."
   (if (= ply 0)
       (funcall eval-fn player board)
-      (let ((moves (legal-moves player board)))
-  (dbg-indent :othello (- 3 ply) "Minimaxing from moves: ~a"  (mapcar #'88->h8 (legal-moves player board)))
+      (let ((moves (legal-moves board)))
+  (dbg-indent :othello (- 3 ply) "Minimaxing from moves: ~a"  (mapcar #'61->g6 (legal-moves board)))
         (if (null moves)
             (if (any-legal-move? (opponent player) board)
                 (- (minimax (opponent player) board
@@ -208,7 +223,7 @@
                     (setf best-val val)
                     (setf best-move move))))
   (dbg-indent :othello (- 3 ply) "Best value: ~a"  best-val)
-  (dbg-indent :othello (- 3 ply) "Best move: ~a"  (88->h8 best-move))
+  (dbg-indent :othello (- 3 ply) "Best move: ~a"  (61->g6 best-move))
               (values best-val best-move))))))
 
 (defun minimax-searcher (ply eval-fn)
@@ -225,8 +240,8 @@
   using cutoffs whenever possible."
   (if (= ply 0)
       (funcall eval-fn player board)
-      (let ((moves (legal-moves player board)))
-  (dbg-indent :othello (- 3 ply) "Alpha-beta from moves: ~a"  (mapcar #'88->h8 (legal-moves player board)))        (if (null moves)
+      (let ((moves (legal-moves board)))
+  (dbg-indent :othello (- 3 ply) "Alpha-beta from moves: ~a"  (mapcar #'61->g6 (legal-moves board)))        (if (null moves)
             (if (any-legal-move? (opponent player) board)
                 (- (alpha-beta (opponent player) board
                                (- cutoff) (- achievable)
@@ -245,7 +260,7 @@
                     (setf best-move move)))
                 until (>= achievable cutoff))
   (dbg-indent :othello (- 3 ply) "Achievable value: ~a"  achievable)
-  (dbg-indent :othello (- 3 ply) "Best move: ~a"  (88->h8 best-move))
+  (dbg-indent :othello (- 3 ply) "Best move: ~a"  (61->g6 best-move))
               (values achievable best-move))))))
 
 (defun alpha-beta-searcher (depth eval-fn)
@@ -261,7 +276,7 @@
   "Like WEIGHTED-SQUARES, but don't take off for moving
   near an occupied corner."
   (let ((w (weighted-squares player board)))
-    (dolist (corner '(11 18 81 88))
+    (dolist (corner '(10 16 55 61))
       (when (not (eql (bref board corner) empty))
         (dolist (c (neighbors corner))
           (when (not (eql (bref board c) empty))
@@ -270,7 +285,7 @@
                            +1 -1)))))))
     w))
 
-(let ((neighbor-table (make-array 100 :initial-element nil)))
+(let ((neighbor-table (make-array 72 :initial-element nil)))
   ;; Initialize the neighbor table
   (dolist (square all-squares)
     (dolist (dir all-directions)
@@ -282,29 +297,51 @@
     "Return a list of all squares adjacent to a square."
     (aref neighbor-table square)))
 
-(let ((square-names 
-        (cross-product #'symbol2
-                       '(? a b c d e f g h ?)
-                       '(? 1 2 3 4 5 6 7 8 ?))))
+(defun col->num-help (row col board)
+  (if (eql (bref board (+ row col)) empty)
+      (+ row col)
+    (col->num-help (- row 9) col board)))
 
-  (defun h8->88 (str)
-    "Convert from alphanumeric to numeric square notation."
-    (or (position (string str) square-names :test #'string-equal)
-        str))
+(defun col->num (col board)
+  "Convert from column number to numeric square notation."
+  (col->num-help 54 col board))
 
-  (defun 88->h8 (num)
-    "Convert from numeric to alphanumeric square notation."
-    (if (valid-p num)
-        (elt square-names num)
-        num)))
+(defun num->col (num)
+  "Convert from number to column number."
+  (mod num 9))
 
 ;;; allows for early termination by entering a move of: resign
 (defun human (player board)
   "A human player for the game of Othello"
   (format t "~&~c to move ~a: " (name-of player)
-          (mapcar #'88->h8 (legal-moves player board)))
-  (h8->88 (read)))
+          (legal-moves board))
+  (read))
+ ;(col->num (read) board))
 
+(defun find-four (start board dir num-left)
+  (if (eql num-left 0)
+      t
+    (if (eql (bref board start) (bref board (+ start dir)))
+	(find-four (+ start dir) board dir (- num-left 1))
+      nil)))
+
+(defun winner (start board)
+  (if (eql start 62)
+      nil
+    (if (or (eql (bref board start) black) (eql (bref board start) white))
+	(if (or
+	     (find-four start board -10 3)
+	     (find-four start board -9 3)
+	     (find-four start board -8 3)
+	     (find-four start board -1 3)
+	     (find-four start board 1 3)
+	     (find-four start board 8 3)
+	     (find-four start board 9 3)
+	     (find-four start board 10 3))
+	    (bref board start)
+	  (winner (+ start 1) board))
+      (winner (+ start 1) board))
+    ))
 
 (defvar *move-number* 1 "The number of the move to be played")
 
@@ -323,11 +360,16 @@
             for strategy = (if (eql player black) 
                                bl-strategy
                                wh-strategy)
-            until (null player)
+            until (or (not (null (winner 10 board))) (null player))
             do (get-move strategy player board print clock))
       (when print
-        (format t "~&The game is over.  Final result:")
-        (print-board board clock))
+        (format t "~&The game is over.  Final result: ")
+        (print-board board clock)
+	(princ (winner 10 board))(terpri))
+
+;;THIS IS WHERE YOU LEFT OFF PRINT OUT THE WINNER SONOFABITCH!!!
+
+
       (count-difference black board))))
 
 (defvar *clock* (make-array 3) "A copy of the game clock")
@@ -338,39 +380,40 @@
   Keep calling until a legal move is made."
   ;; Note we don't pass the strategy function the REAL board.
   ;; If we did, it could cheat by changing the pieces on the board.
+  (princ "In get-move...")(terpri)
   (when print (print-board board clock))
   (replace *clock* clock)
   (let* ((t0 (get-internal-real-time))
          (move (funcall strategy player (replace *board* board)))
          (t1 (get-internal-real-time)))
     (decf (elt clock player) (- t1 t0))
+    ;(princ move)(terpri)
+    ;(princ (valid-p move))(terpri)
+    ;(princ "Made it!")(terpri)
     (cond
       ((< (elt clock player) 0)
        (format t "~&~c has no time left and forfeits."
                (name-of player))
-       (THROW 'game-over (if (eql player black) -64 64)))
+       (THROW 'game-over (if (eql player black) -42 42)))
       ((eq move 'resign)
-       (THROW 'game-over (if (eql player black) -64 64)))
-      ((and (valid-p move) (legal-p move player board))
+       (THROW 'game-over (if (eql player black) -42 42)))
+      ((and (valid-p move) (legal-p move board))
        (when print
          (format t "~&~c moves to ~a." 
-                 (name-of player) (88->h8 move)))
-       (make-move move player board))
-      (t (warn "Illegal move: ~a" (88->h8 move))
+                 (name-of player) move))
+       (make-move (col->num move board) player board))
+      (t (warn "Illegal move: ~a" (num->col move))
          (get-move strategy player board print clock)))))
 
 (defun print-board (&optional (board *board*) clock)
   "Print a board, along with some statistics."
   ;; First print the header and the current score
-  (format t "~2&    a b c d e f g h   [~c=~2a ~c=~2a (~@d)]"
-          (name-of black) (count black board)
-          (name-of white) (count white board)
-          (count-difference black board))
+  (format t "~2&    1 2 3 4 5 6 7 ")
   ;; Print the board itself
-  (loop for row from 1 to 8 do
-        (format t "~&  ~d " row)
-        (loop for col from 1 to 8
-              for piece = (bref board (+ col (* 10 row)))
+  (loop for row from 1 to 6 do
+        (format t "~& ~d " "  " )
+        (loop for col from 1 to 7
+              for piece = (bref board (+ col (* 9 row)))
               do (format t "~c " (name-of piece))))
   ;; Finally print the time remaining for each player
   (when clock
@@ -384,69 +427,9 @@
       (floor (round time internal-time-units-per-second) 60)
     (format nil "~2d:~2,'0d" min sec)))
 
-(defun random-othello-series (strategy1 strategy2 
-                              n-pairs &optional (n-random 10))
-  "Play a series of 2*n games, starting from a random position."
-  (othello-series
-    (switch-strategies #'random-strategy n-random strategy1)
-    (switch-strategies #'random-strategy n-random strategy2)
-    n-pairs))
-
-(defun switch-strategies (strategy1 m strategy2)
-  "Make a new strategy that plays strategy1 for m moves,
-  then plays according to strategy2."
-  #'(lambda (player board)
-      (funcall (if (<= *move-number* m) strategy1 strategy2)
-               player board)))
-
-(defun othello-series (strategy1 strategy2 n-pairs)
-  "Play a series of 2*n-pairs games, swapping sides."
-  (let ((scores
-          (loop repeat n-pairs
-             for random-state = (make-random-state)
-             collect (othello strategy1 strategy2 nil)
-             do (setf *random-state* random-state)
-             collect (- (othello strategy2 strategy1 nil)))))
-    ;; Return the number of wins (1/2 for a tie),
-    ;; the total of the point differences, and the
-    ;; scores themselves, all from strategy1's point of view.
-    (values (+ (count-if #'plusp scores)
-               (/ (count-if #'zerop scores) 2))
-            (apply #'+ scores)
-            scores)))
-
-(defun round-robin (strategies n-pairs &optional
-                    (n-random 10) (names strategies))
-  "Play a tournament among the strategies.
-  N-PAIRS = games each strategy plays as each color against
-  each opponent.  So with N strategies, a total of
-  N*(N-1)*N-PAIRS games are played."
-  (let* ((N (length strategies))
-         (totals (make-array N :initial-element 0))
-         (scores (make-array (list N N)
-                             :initial-element 0)))
-    ;; Play the games
-    (dotimes (i N)
-      (loop for j from (+ i 1) to (- N 1) do 
-          (let* ((wins (random-othello-series
-                         (elt strategies i)
-                         (elt strategies j)
-                         n-pairs n-random))
-                 (losses (- (* 2 n-pairs) wins)))
-            (incf (aref scores i j) wins)
-            (incf (aref scores j i) losses)
-            (incf (aref totals i) wins)
-            (incf (aref totals j) losses))))
-    ;; Print the results
-    (dotimes (i N)
-      (format t "~&~a~20T ~4f: " (elt names i) (elt totals i))
-      (dotimes (j N)
-        (format t "~4f " (if (= i j) '---
-                             (aref scores i j)))))))
-
-(defun mobility (player board)
-  "The number of moves a player has."
-  (length (legal-moves player board)))
+;(defun mobility (player board)
+;  "The number of moves a player has."
+;  (length (legal-moves board)))
 
 ;;; ********************************************
 
@@ -458,20 +441,20 @@
 (println "**********************")
 (terpri)
 
-(println "Let's play some abbreviated games of Othello tracing the computer's strategy")
-(println "We will start by playing against the random selection strategy.") 
-(println "Enter a move of: resign to terminate the game.")
-(terpri)
+;(println "Let's play some abbreviated games of Othello tracing the computer's strategy")
+;(println "We will start by playing against the random selection strategy.") 
+;(println "Enter a move of: resign to terminate the game.")
+;(terpri)
 
-(debug2 :othello)
-(othello #'human #'random-strategy)
-(read-line)(terpri)
+;(debug2 :othello)
+;(othello #'human #'random-strategy)
+;(read-line)(terpri)
 
 
 (println "Now let's play human against maximizer strategy/count-difference eval.") 
 (println "Enter a move of: resign to terminate the game.")
 (terpri)
-(othello #'human (maximizer #'count-difference))
+(othello #'human (maximizer #'evaluation-fn))
 (read-line)(terpri)
 
 (println "Now let's play human against minimax strategy/count-difference eval.") 
