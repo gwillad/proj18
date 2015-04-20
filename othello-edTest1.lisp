@@ -73,30 +73,25 @@
       (how-many (+ start dir) board dir (+ 1 num))
     num))
 
-(defun count-in-row (player curr-max start board)
+(defun count-in-row (player total start board)
   "Count the number of pieces the player has in a row."
 ;  (princ "In count-in-row. Looking at pos: ")(princ start)(terpri)
   (if (eql start 62)
-      curr-max
+      total
     (if (eql (bref board start) player)
-	(let ((new-max (max
-			(how-many start board -10 1)
-			(how-many start board -9 1)
-			(how-many start board -8 1)
-			(how-many start board -1 1)
+	(let ((in-a-row (max
 			(how-many start board 1 1)
 			(how-many start board 8 1)
 			(how-many start board 9 1)
 			(how-many start board 10 1))))
-	  (if (> new-max curr-max)
-	      (count-in-row player new-max (+ start 1) board)
-	    (count-in-row player curr-max (+ start 1) board)))
-      (count-in-row player curr-max (+ start 1) board))
-    ))
+	  (count-in-row player (+ total (* in-a-row in-a-row))
+			(+ start 1) board))
+      (count-in-row player total (+ start 1) board))))
 
 (defun evaluation-fn (player board)
-  "returns 1-3 based on how many in a row for that board" 
-  (count-in-row player 1 10 board))
+  "Returns sum of each connected string on board squared
+   ie 2 in a row is worth 4, 3 is worth 9, etc"
+  (count-in-row player 0 10 board))
 
 (defun valid-p (move)
   "Valid moves are columns 1-7 as long as the column isn't full."
@@ -237,40 +232,40 @@
         (declare (ignore value))
         move)))
 
-(defun alpha-beta (player board achievable cutoff ply eval-fn)
-  "Find the best move, for PLAYER, according to EVAL-FN,
-  searching PLY levels deep and backing up values,
-  using cutoffs whenever possible."
-  (if (= ply 0)
-      (funcall eval-fn player board)
-      (let ((moves (legal-moves board)))
-            (if (any-legal-move? (opponent player) board)
-                (- (alpha-beta (opponent player) board
-                               (- cutoff) (- achievable)
-                               (- ply 1) eval-fn))
-                (final-value player board))
-            (let ((best-move (first moves)))
-              (loop for move in moves do
-                (let* ((board2 (make-move move player
-                                          (copy-board board)))
-                       (val (- (alpha-beta
-                                 (opponent player) board2
-                                 (- cutoff) (- achievable)
-                                 (- ply 1) eval-fn))))
-                  (when (> val achievable)
-                    (setf achievable val)
-                    (setf best-move move)))
-                until (>= achievable cutoff))
-              (values achievable best-move))))))
+;(defun alpha-beta (player board achievable cutoff ply eval-fn)
+;  "Find the best move, for PLAYER, according to EVAL-FN,
+;  searching PLY levels deep and backing up values,
+;  using cutoffs whenever possible."
+;  (if (= ply 0)
+;      (funcall eval-fn player board)
+;      (let ((moves (legal-moves board)))
+;            (if (any-legal-move? (opponent player) board)
+;                (- (alpha-beta (opponent player) board
+;                               (- cutoff) (- achievable)
+;                               (- ply 1) eval-fn))
+;                (final-value player board))
+;            (let ((best-move (first moves)))
+;              (loop for move in moves do
+;                (let* ((board2 (make-move move player
+;                                          (copy-board board)))
+;                       (val (- (alpha-beta
+;                                 (opponent player) board2
+;                                 (- cutoff) (- achievable)
+;                                 (- ply 1) eval-fn))))
+;                  (when (> val achievable)
+;                    (setf achievable val)
+;                    (setf best-move move)))
+;                until (>= achievable cutoff))
+;              (values achievable best-move))))))
 
-(defun alpha-beta-searcher (depth eval-fn)
-  "A strategy that searches to DEPTH and then uses EVAL-FN."
-  #'(lambda (player board)
-      (multiple-value-bind (value move)
-          (alpha-beta player board losing-value winning-value
-                      depth eval-fn) 
-        (declare (ignore value))
-        move)))
+;(defun alpha-beta-searcher (depth eval-fn)
+;  "A strategy that searches to DEPTH and then uses EVAL-FN."
+;  #'(lambda (player board)
+;      (multiple-value-bind (value move)
+;          (alpha-beta player board losing-value winning-value
+;                      depth eval-fn) 
+;        (declare (ignore value))
+;        move)))
 
 (defun modified-weighted-squares (player board)
   "Like WEIGHTED-SQUARES, but don't take off for moving
