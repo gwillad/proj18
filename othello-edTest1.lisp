@@ -88,9 +88,6 @@
 			(how-many start board 8 1)
 			(how-many start board 9 1)
 			(how-many start board 10 1))))
-;	  (princ "Examining position: ")(princ start)(terpri)
-;	  (princ "curr-max: ")(princ curr-max)(terpri)
-;	  (princ "new-max: ")(princ new-max)(terpri)
 	  (if (> new-max curr-max)
 	      (count-in-row player new-max (+ start 1) board)
 	    (count-in-row player curr-max (+ start 1) board)))
@@ -98,18 +95,16 @@
     ))
 
 (defun evaluation-fn (player board)
-;  (princ "In evaluation-fn...")(terpri)
+  "returns 1-3 based on how many in a row for that board" 
   (count-in-row player 1 10 board))
 
 (defun valid-p (move)
   "Valid moves are columns 1-7 as long as the column isn't full."
-  ;(princ "In valid-p")(terpri)
   (and (integerp move) (<= 1 move 7)))
 
 (defun legal-p (move board)
   "A Legal move must be into an empty square,
    and with no empty squares below it."
-  ;(princ "In legal-p")(terpri)
   (eql (bref board (+ move 9)) empty))
 
 (defun make-move (move player board)
@@ -167,22 +162,17 @@
       (princ "In maximizer...")(terpri)
       (princ "board: ")(princ board)(terpri)
       (let* ((moves (legal-moves board))
-             (scores (mapcar #'(lambda (move)
-				 (princ "In this internal lambda...")(terpri)
-				 (princ "moves: ")(princ moves)(terpri)
-				 (princ "player: ")(princ player)(terpri)
-				 (princ "eval-fn: ")(princ eval-fn)(terpri)
-				 (funcall eval-fn player
-				  (make-move (col->num move board) player
-					     (copy-board board))))
-                             moves))
+             (scores (mapcar 
+		      #'(lambda (move)
+			  (funcall 
+			   eval-fn 
+			   player 
+			   (make-move 
+			    (col->num move board) 
+			    player 
+			    (copy-board board))))
+		      moves))
              (best  (apply #'max scores)))
-;  (dbg-indent :othello 0 "Maximizing from moves: ~a"  (mapcar #'61->g6 (legal-moves board)))
-;  (dbg-indent :othello 0 "Corresponding scores: ~a"  scores)
-;  (dbg-indent :othello 0 "Best score: ~a"  best)
-	(princ "Moves: ")(princ moves)(terpri)
-	(princ "Scores: ")(princ scores)(terpri)
-	(princ "best: ")(princ best)(terpri)
         (elt moves (position best scores)))))
 
 (defparameter *weights*
@@ -220,7 +210,6 @@
   (if (= ply 0)
       (funcall eval-fn player board)
       (let ((moves (legal-moves board)))
-  (dbg-indent :othello (- 3 ply) "Minimaxing from moves: ~a"  (mapcar #'61->g6 (legal-moves board)))
         (if (null moves)
             (if (any-legal-move? (opponent player) board)
                 (- (minimax (opponent player) board
@@ -238,8 +227,6 @@
                             (> val best-val))
                     (setf best-val val)
                     (setf best-move move))))
-  (dbg-indent :othello (- 3 ply) "Best value: ~a"  best-val)
-  (dbg-indent :othello (- 3 ply) "Best move: ~a"  (61->g6 best-move))
               (values best-val best-move))))))
 
 (defun minimax-searcher (ply eval-fn)
@@ -257,7 +244,6 @@
   (if (= ply 0)
       (funcall eval-fn player board)
       (let ((moves (legal-moves board)))
-  (dbg-indent :othello (- 3 ply) "Alpha-beta from moves: ~a"  (mapcar #'61->g6 (legal-moves board)))        (if (null moves)
             (if (any-legal-move? (opponent player) board)
                 (- (alpha-beta (opponent player) board
                                (- cutoff) (- achievable)
@@ -275,8 +261,6 @@
                     (setf achievable val)
                     (setf best-move move)))
                 until (>= achievable cutoff))
-  (dbg-indent :othello (- 3 ply) "Achievable value: ~a"  achievable)
-  (dbg-indent :othello (- 3 ply) "Best move: ~a"  (61->g6 best-move))
               (values achievable best-move))))))
 
 (defun alpha-beta-searcher (depth eval-fn)
@@ -320,7 +304,7 @@
   (format t "~&~c to move ~a: " (name-of player)
           (legal-moves board))
   (read))
- ;(col->num (read) board))
+
 
 (defun find-four (start board dir num-left)
   (if (eql num-left 0)
@@ -369,11 +353,8 @@
       (when print
         (format t "~&The game is over.  Final result: ")
         (print-board board clock)
+	(princ "The winner is player ")
 	(princ (winner 10 board))(terpri))
-
-;;THIS IS WHERE YOU LEFT OFF PRINT OUT THE WINNER SONOFABITCH!!!
-
-
       (count-difference black board))))
 
 (defvar *clock* (make-array 3) "A copy of the game clock")
@@ -391,9 +372,6 @@
          (move (funcall strategy player (replace *board* board)))
          (t1 (get-internal-real-time)))
     (decf (elt clock player) (- t1 t0))
-    ;(princ move)(terpri)
-    ;(princ (valid-p move))(terpri)
-    ;(princ "Made it!")(terpri)
     (cond
       ((< (elt clock player) 0)
        (format t "~&~c has no time left and forfeits."
@@ -431,10 +409,6 @@
       (floor (round time internal-time-units-per-second) 60)
     (format nil "~2d:~2,'0d" min sec)))
 
-;(defun mobility (player board)
-;  "The number of moves a player has."
-;  (length (legal-moves board)))
-
 ;;; ********************************************
 
 (defun println (str) (princ str) (terpri))
@@ -445,26 +419,11 @@
 (println "**********************")
 (terpri)
 
-;(println "Let's play some abbreviated games of Othello tracing the computer's strategy")
-;; (println "We will start by playing against the random selection strategy.") 
-;; (println "Enter a move of: resign to terminate the game.")
-;; (terpri)
-
-;; (debug2 :othello)
-;; (othello #'human #'random-strategy)
-;; (read-line)(terpri)
-
-(println "Now let's play human against maximizer strategy/count-difference eval.") 
+(println "Now let's play human against minimax strategy/count-difference eval.") 
 (println "Enter a move of: resign to terminate the game.")
 (terpri)
-(othello #'human (maximizer #'evaluation-fn))
+(othello #'human (minimax-searcher 3 #'evaluation-fn))
 (read-line)(terpri)
-
-;; (println "Now let's play human against minimax strategy/count-difference eval.") 
-;; (println "Enter a move of: resign to terminate the game.")
-;; (terpri)
-;; (othello #'human (minimax-searcher 3 #'count-difference))
-;; (read-line)(terpri)
 
 ;; (println "Finally we play human against alpha-beta strategy/count-difference eval.") 
 ;; (println "Enter a move of: resign to terminate the game.")
