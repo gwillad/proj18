@@ -37,6 +37,19 @@
 (defun copy-board (board)
   (copy-seq board))
 
+(defun col->num-help (row col board)
+  (if (eql (bref board (+ row col)) empty)
+      (+ row col)
+    (col->num-help (- row 9) col board)))
+
+(defun col->num (col board)
+  "Convert from column number to numeric square notation."
+  (col->num-help 54 col board))
+
+(defun num->col (num)
+  "Convert from number to column number."
+  (mod num 9))
+
 (defconstant all-squares
   (loop for i from 10 to 61 when (<= 1 (mod i 9) 7) collect i))
 
@@ -101,7 +114,11 @@
 
 (defun make-move (move player board)
   "Update board to reflect move by player"
-  (setf (bref board move) player))
+  (if (> move 7)
+      (setf (bref board move) player)
+    (setf (bref board (col->num move board)) player))
+  board)
+  
 
 (defun find-bracketing-piece (square player board dir)
   "Return the square number of the bracketing piece."
@@ -129,6 +146,7 @@
 (defun random-strategy (player board)
   "Make any legal move."
   (dbg-indent :othello 0 "Choosing randomly from: ~a"  (legal-moves board))
+  
   (random-elt (legal-moves board)))
 
 (defun legal-moves (board)
@@ -154,10 +172,8 @@
 				 (princ "moves: ")(princ moves)(terpri)
 				 (princ "player: ")(princ player)(terpri)
 				 (princ "eval-fn: ")(princ eval-fn)(terpri)
-				 (funcall
-				  eval-fn
-				  player
-				  (make-move move player
+				 (funcall eval-fn player
+				  (make-move (col->num move board) player
 					     (copy-board board))))
                              moves))
              (best  (apply #'max scores)))
@@ -297,18 +313,6 @@
     "Return a list of all squares adjacent to a square."
     (aref neighbor-table square)))
 
-(defun col->num-help (row col board)
-  (if (eql (bref board (+ row col)) empty)
-      (+ row col)
-    (col->num-help (- row 9) col board)))
-
-(defun col->num (col board)
-  "Convert from column number to numeric square notation."
-  (col->num-help 54 col board))
-
-(defun num->col (num)
-  "Convert from number to column number."
-  (mod num 9))
 
 ;;; allows for early termination by entering a move of: resign
 (defun human (player board)
@@ -442,14 +446,13 @@
 (terpri)
 
 ;(println "Let's play some abbreviated games of Othello tracing the computer's strategy")
-;(println "We will start by playing against the random selection strategy.") 
-;(println "Enter a move of: resign to terminate the game.")
-;(terpri)
+;; (println "We will start by playing against the random selection strategy.") 
+;; (println "Enter a move of: resign to terminate the game.")
+;; (terpri)
 
-;(debug2 :othello)
-;(othello #'human #'random-strategy)
-;(read-line)(terpri)
-
+;; (debug2 :othello)
+;; (othello #'human #'random-strategy)
+;; (read-line)(terpri)
 
 (println "Now let's play human against maximizer strategy/count-difference eval.") 
 (println "Enter a move of: resign to terminate the game.")
@@ -457,17 +460,17 @@
 (othello #'human (maximizer #'evaluation-fn))
 (read-line)(terpri)
 
-(println "Now let's play human against minimax strategy/count-difference eval.") 
-(println "Enter a move of: resign to terminate the game.")
-(terpri)
-(othello #'human (minimax-searcher 3 #'count-difference))
-(read-line)(terpri)
+;; (println "Now let's play human against minimax strategy/count-difference eval.") 
+;; (println "Enter a move of: resign to terminate the game.")
+;; (terpri)
+;; (othello #'human (minimax-searcher 3 #'count-difference))
+;; (read-line)(terpri)
 
-(println "Finally we play human against alpha-beta strategy/count-difference eval.") 
-(println "Enter a move of: resign to terminate the game.")
-(terpri)
-(othello #'human (alpha-beta-searcher 3 #'count-difference))
-(read-line)(terpri)
+;; (println "Finally we play human against alpha-beta strategy/count-difference eval.") 
+;; (println "Enter a move of: resign to terminate the game.")
+;; (terpri)
+;; (othello #'human (alpha-beta-searcher 3 #'count-difference))
+;; (read-line)(terpri)
 
 (undebug)
 
